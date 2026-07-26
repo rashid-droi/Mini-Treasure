@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafafa;
+  --foreground: #18181b;
 }
 
 @theme inline {
@@ -12,15 +12,23 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Mini Treasure uses a single light theme; don't flip base colors in
+   dark-mode browsers (every screen sets its own light background). */
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Leaflet paints its container light gray (#ddd) by default. Make it
+   transparent so the scene panel's own background shows through instead. */
+.leaflet-container {
+  background: transparent;
+}
+
+/* Invisible hidden-object hotspots in the game scene: keep the map's grab
+   cursor so hovering an object doesn't reveal it via a pointer cursor */
+.leaflet-interactive.hidden-hotspot {
+  cursor: grab;
 }

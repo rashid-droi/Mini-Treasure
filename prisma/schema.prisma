@@ -1,0 +1,211 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  PARTICIPANT
+}
+
+enum EventStatus {
+  DRAFT
+  UPCOMING
+  ACTIVE
+  COMPLETED
+}
+
+enum EventMode {
+  INDIVIDUAL // Each player is their own solo team (classic)
+  TEAM       // Players group into shared teams and solve clues together
+}
+
+enum ClueType {
+  TEXT
+  IMAGE
+  RIDDLE
+  LOCATION
+  OBJECT
+  QUESTION
+}
+
+enum HotspotShape {
+  CIRCLE
+  SQUARE
+}
+
+model User {
+  id       String @id @default(uuid())
+  email    String @unique
+  password String
+  username String @unique
+  role     Role   @default(PARTICIPANT)
+
+  participants Participant[]
+  chats        Chat[]
+  answers      TeamAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Scene {
+  id       String @id @default(uuid())
+  name     String
+  imageUrl String
+  clickTolerance Float @default(60)
+
+  clues Clue[]
+  events Event[]
+
+  createdAt DateTime @default(now())
+}
+
+model Event {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  joinCode    String  @unique // Code players enter to join this event
+
+  sceneId String?
+  scene   Scene?  @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+
+  status       EventStatus @default(DRAFT)
+  mode         EventMode   @default(INDIVIDUAL) // INDIVIDUAL = solo teams; TEAM = shared teams
+  gameDuration Int? // Duration in minutes
+  maxTeams     Int? // Optional limit on number of teams
+  maxTeamSize  Int? // TEAM mode: optional cap on members per team (e.g. 4)
+
+  startTime DateTime?
+  endTime   DateTime?
+
+  teams        Team[]
+  answers      TeamAnswer[]
+  leaderboards Leaderboard[]
+  chats        Chat[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Team {
+  id   String @id @default(uuid())
+  name String
+
+  // Short shareable code players type to join THIS specific team (TEAM mode).
+  // Admin-created teams always get one; older/solo teams may have none.
+  code String? @unique
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  participants Participant[]
+  answers      TeamAnswer[]
+  leaderboards Leaderboard[]
+  chats        Chat[]
+
+  activeClueId    String?
+  activeClue      Clue?   @relation(fields: [activeClueId], references: [id], onDelete: SetNull, name: "TeamActiveClue")
+  activeClueHints Int     @default(0)
+  totalHintsUsed  Int     @default(0)
+  wrongAttempts   Int     @default(0)
+
+  createdAt DateTime @default(now())
+}
+
+model Participant {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  isReady  Boolean  @default(false)
+  joinedAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+}
+
+model Clue {
+  id      String @id @default(uuid())
+  sceneId String
+  scene   Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  type        ClueType @default(TEXT)
+  mediaUrl    String?
+  points      Int      @default(10)
+  order       Int      @default(0) // Sequence within a scene; lowest served first
+  targetX     Float
+  targetY     Float
+  radius      Int? // Per-object hotspot radius/half-size (map units). Falls back to Scene.clickTolerance when null.
+  shape       HotspotShape @default(CIRCLE) // Hotspot geometry: CIRCLE (distance) or SQUARE (bounding box)
+
+  // QUESTION clues: dropdown answer choices and the correct one
+  options       String[] @default([])
+  correctAnswer String?
+
+  answers        TeamAnswer[]
+  activeForTeams Team[]       @relation("TeamActiveClue")
+
+  @@index([sceneId])
+}
+
+model TeamAnswer {
+  id     String @id @default(uuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  clueId String
+  clue   Clue   @relation(fields: [clueId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  foundAt   DateTime @default(now())
+  isCorrect Boolean  @default(true)
+
+  @@unique([teamId, clueId])
+  @@index([eventId, teamId])
+}
+
+model Leaderboard {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  score            Int  @default(0)
+  bonusPoints      Int  @default(0)
+  completionTimeMs Int? // Milliseconds to complete all clues
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, teamId])
+  @@index([eventId])
+}
+
+model Chat {
+  id      String @id @default(uuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  senderId String
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  message   String
+  timestamp DateTime @default(now())
+}

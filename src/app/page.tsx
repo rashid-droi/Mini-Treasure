@@ -1,65 +1,67 @@
-import Image from "next/image";
+import Link from "next/link";
+import { Ticket, Users, Target, Lightbulb, Trophy, Medal } from "lucide-react";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-[#fafafa] flex flex-col">
+      {/* Top nav */}
+      <header className="flex items-center gap-4 px-6 sm:px-10 py-5 border-b border-zinc-200 bg-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="Mini Treasure" className="h-10 w-auto" />
+        <div className="hidden sm:block h-8 w-px bg-zinc-200" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/select.png" alt="Select" className="hidden sm:block h-9 w-auto" />
+      </header>
+
+      {/* Hero */}
+      <main className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16">
+        <div className="w-16 h-16 mb-6 rounded-2xl bg-[#f5c518]/20 text-[#c99a00] flex items-center justify-center">
+          <Trophy className="w-8 h-8" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-zinc-900 max-w-3xl">
+          The Ultimate Treasure Hunt Experience
+        </h1>
+        <p className="text-zinc-500 mt-5 max-w-xl text-base sm:text-lg">
+          Team up, race the clock, and hunt hidden clues across interactive scenes.
+          Join an event with a code — no account needed to play.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center gap-4 mt-10">
+          <Link
+            href="/join"
+            className="px-8 py-4 bg-[#f5c518] hover:bg-[#e6b800] text-zinc-900 font-semibold rounded-xl shadow-sm transition-all duration-300 active:scale-[0.98] flex items-center gap-2 text-lg"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <Ticket className="w-5 h-5" />
+            Join an Event
+          </Link>
+        </div>
+
+        {/* Feature cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-20 w-full max-w-5xl">
+          {[
+            { icon: Target, color: "text-emerald-600 bg-emerald-500/10", title: "Find the Clues", text: "Click the hidden objects in each scene before time runs out." },
+            { icon: Users, color: "text-blue-600 bg-blue-500/10", title: "Play in Teams", text: "Chat live with your teammates and solve clues together." },
+            { icon: Lightbulb, color: "text-[#c99a00] bg-[#f5c518]/15", title: "Use Hints Wisely", text: "Stuck? Buy a hint — but it will cost your team points." },
+            { icon: Medal, color: "text-[#e8842c] bg-orange-500/10", title: "Climb the Board", text: "Watch the live leaderboard and race to the top spot." },
+          ].map(({ icon: Icon, color, title, text }) => (
+            <div key={title} className="bg-white border border-zinc-200 rounded-2xl p-6 text-left shadow-sm">
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${color}`}>
+                <Icon className="w-5 h-5" />
+              </div>
+              <h3 className="text-zinc-900 font-bold mb-1">{title}</h3>
+              <p className="text-zinc-500 text-sm">{text}</p>
+            </div>
+          ))}
         </div>
       </main>
+
+      <footer className="text-center text-zinc-500 text-sm py-6 border-t border-zinc-200 bg-white">
+        Hosting an event?{" "}
+        <Link href="/login" className="text-[#e8842c] hover:underline">
+          Sign in
+        </Link>{" "}
+        to manage your games.
+      </footer>
     </div>
   );
 }
