@@ -1,16 +1,10 @@
 "use client";
 
-import { updateUserRole, deleteUser } from "@/actions/admin/users";
+import { deleteUser } from "@/actions/admin/users";
 import { Trash2, Shield, User } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function PlayersClient({ users }: { users: any[] }) {
-  const handleRoleChange = async (id: string, role: string) => {
-    const res = await updateUserRole(id, role);
-    if (res.error) toast.error(res.error);
-    else toast.success("Role updated!");
-  };
-
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure? This will delete the user and all their game progress!")) return;
     const res = await deleteUser(id);
@@ -34,7 +28,6 @@ export default function PlayersClient({ users }: { users: any[] }) {
               <tr>
                 <th className="px-6 py-4 font-bold">Username</th>
                 <th className="px-6 py-4 font-bold">Event</th>
-                <th className="px-6 py-4 font-bold">Role</th>
                 <th className="px-6 py-4 font-bold text-right">Actions</th>
               </tr>
             </thead>
@@ -55,18 +48,6 @@ export default function PlayersClient({ users }: { users: any[] }) {
                         : <span className="text-zinc-400">—</span>;
                     })()}
                   </td>
-                  <td className="px-6 py-4">
-                    <select
-                      value={user.role}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className={`px-3 py-1 rounded-full text-xs font-bold border outline-none bg-white ${
-                        user.role === 'ADMIN' ? 'text-[#c99a00] border-[#f5c518]/50' : 'text-zinc-500 border-zinc-300'
-                      }`}
-                    >
-                      <option value="PARTICIPANT">PARTICIPANT</option>
-                      <option value="ADMIN">ADMIN</option>
-                    </select>
-                  </td>
                   <td className="px-6 py-4 text-right">
                     <button onClick={() => handleDelete(user.id)} className="p-2 text-zinc-400 hover:text-rose-500 bg-zinc-100 hover:bg-rose-50 rounded-lg transition-colors" title="Delete User">
                       <Trash2 className="w-4 h-4" />
@@ -76,7 +57,7 @@ export default function PlayersClient({ users }: { users: any[] }) {
               ))}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-8 text-center text-zinc-400">
+                  <td colSpan={3} className="px-6 py-8 text-center text-zinc-400">
                     No users found.
                   </td>
                 </tr>

@@ -39,7 +39,8 @@ export async function importTileScene(folderId: string) {
       data: {
         id: safe,
         name,
-        imageUrl: `/tiles/${safe}/0/0/0.jpg`
+        imageUrl: `/tiles/${safe}/0/0/0.jpg`,
+        clickTolerance: 5,
       }
     });
     revalidatePath("/admin/scenes");
@@ -85,7 +86,7 @@ export async function getSceneById(id: string) {
 export async function createSceneFromUpload(formData: FormData) {
   try {
     const name = String(formData.get("name") ?? "").trim();
-    const clickTolerance = Number(formData.get("clickTolerance") ?? 60) || 60;
+    const clickTolerance = Number(formData.get("clickTolerance") ?? 5) || 5;
     const file = formData.get("image");
 
     if (!name) return { error: "Scene name is required." };
@@ -101,10 +102,24 @@ export async function createSceneFromUpload(formData: FormData) {
 
     const sharp = (await import("sharp")).default;
     const buffer = Buffer.from(await file.arrayBuffer());
-    await sharp(buffer)
-      .jpeg({ quality: 80 })
-      .tile({ size: 256, layout: "google" })
-      .toFile(outputDir);
+
+    // Downscale oversized uploads before tiling. The deep-zoom viewer never
+    // needs more than ~6000px on the long edge, and huge images (e.g. a 50MB
+    // photo) make tiling slow and produce enormous pyramids. Never upscales.
+    const MAX_EDGE = 6000;
+    const meta = await sharp(buffer).metadata();
+    let img = sharp(buffer).rotate(); // honor EXIF orientation
+    if (meta.width && meta.height && Math.max(meta.width, meta.height) > MAX_EDGE) {
+      img = img.resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true });
+    }
+
+    // Tile from an in-memory JPEG so we can record the EXACT tiled dimensions in
+    // meta.json — the viewer reads it to crop the white edge-padding the google
+    // layout adds, giving a pixel-perfect fit with no probing.
+    const { data: jpegBuffer, info } = await img.jpeg({ quality: 80 }).toBuffer({ resolveWithObject: true });
+    await sharp(jpegBuffer).tile({ size: 256, layout: "google" }).toFile(outputDir);
+    fs.writeFileSync(path.join(outputDir, "meta.json"), JSON.stringify({ width: info.width, height: info.height }));
+
     await sharp({ create: { width: 256, height: 256, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
       .png()
       .toFile(path.join(outputDir, "blank.png"));
@@ -137,5 +152,42 @@ export async function deleteScene(id: string) {
     return { success: true };
   } catch (err) {
     return { error: "Failed to delete scene." };
+  }
+}
+
+export async function updateSceneClickTolerance(id: string, clickTolerance: number) {
+  try {
+    const value = Math.round(Math.max(2, Math.min(120, clickTolerance)));
+    const scene = await prisma.scene.update({
+      where: { id },
+      data: { clickTolerance: value },
+    });
+    revalidatePath(`/admin/scenes/${id}`);
+    revalidatePath("/admin/scenes");
+    return { success: true, data: scene };
+  } catch (err) {
+    return { error: "Failed to update hotspot size." };
+  }
+}
+
+// Set the scene default and clear per-clue overrides so every object uses it.
+export async function applyHotspotSizeToAllClues(sceneId: string, clickTolerance: number) {
+  try {
+    const value = Math.round(Math.max(2, Math.min(120, clickTolerance)));
+    const [, updated] = await prisma.$transaction([
+      prisma.scene.update({
+        where: { id: sceneId },
+        data: { clickTolerance: value },
+      }),
+      prisma.clue.updateMany({
+        where: { sceneId },
+        data: { radius: null },
+      }),
+    ]);
+    revalidatePath(`/admin/scenes/${sceneId}`);
+    revalidatePath("/admin/scenes");
+    return { success: true, data: { clickTolerance: value, cluesUpdated: updated.count } };
+  } catch (err) {
+    return { error: "Failed to apply hotspot size to all objects." };
   }
 }

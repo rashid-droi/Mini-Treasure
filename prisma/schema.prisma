@@ -56,7 +56,7 @@ model Scene {
   id       String @id @default(uuid())
   name     String
   imageUrl String
-  clickTolerance Float @default(60)
+  clickTolerance Float @default(5)
 
   clues Clue[]
   events Event[]

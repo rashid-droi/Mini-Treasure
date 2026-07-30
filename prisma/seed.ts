@@ -27,12 +27,12 @@ async function main() {
 
   const scene2 = await prisma.scene.upsert({
     where: { id: "scene2" },
-    update: { clickTolerance: 80 },
+    update: { clickTolerance: 5 },
     create: {
       id: "scene2",
       name: "Scene 2",
       imageUrl: "/placeholder2.jpg",
-      clickTolerance: 80
+      clickTolerance: 5
     }
   });
 

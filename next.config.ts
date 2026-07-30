@@ -4,11 +4,11 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       // Scene photo uploads are tiled server-side; allow large images
-      bodySizeLimit: "20mb",
+      bodySizeLimit: "60mb",
     },
     // Requests pass through src/proxy.ts, which has its own 10MB body cap by
     // default — keep it in sync with the server-action limit above
-    proxyClientMaxBodySize: "20mb",
+    proxyClientMaxBodySize: "60mb",
   },
   images: {
     remotePatterns: [

@@ -4,21 +4,35 @@ import prisma from "@/lib/prisma";
 
 export async function getEventLeaderboard(eventId: string) {
   try {
-    const leaderboards = await prisma.leaderboard.findMany({
+    // Start from every team in the event (not just teams that already have a
+    // Leaderboard row) so the standings show all teams immediately — teams that
+    // haven't scored yet appear at 0 instead of the board looking empty.
+    const teams = await prisma.team.findMany({
       where: { eventId },
-      include: {
-        team: {
-          select: {
-            id: true,
-            name: true,
-            participants: {
-              select: {
-                user: { select: { username: true } }
-              }
-            }
-          }
-        }
-      }
+      select: {
+        id: true,
+        name: true,
+        participants: { select: { user: { select: { username: true } } } },
+        leaderboards: {
+          where: { eventId },
+          select: { id: true, score: true, bonusPoints: true, completionTimeMs: true, updatedAt: true },
+          take: 1,
+        },
+      },
+    });
+
+    const leaderboards = teams.map((t) => {
+      const lb = t.leaderboards[0];
+      return {
+        id: lb?.id ?? t.id,
+        team: { id: t.id, name: t.name, participants: t.participants },
+        score: lb?.score ?? 0,
+        bonusPoints: lb?.bonusPoints ?? 0,
+        completionTimeMs: lb?.completionTimeMs ?? null,
+        // When the team last submitted (last score change). null = never scored.
+        submittedAt: lb?.updatedAt ?? null,
+        updatedAt: lb?.updatedAt ?? new Date(0),
+      };
     });
 
     // Custom sorting:
@@ -52,7 +66,14 @@ export async function getEventLeaderboard(eventId: string) {
       return a.updatedAt.getTime() - b.updatedAt.getTime(); 
     });
 
-    return { success: true, data: leaderboards };
+    // The event start powers the live "time so far" clock for teams that
+    // haven't finished yet (they have no fixed completionTimeMs).
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { startTime: true },
+    });
+
+    return { success: true, data: leaderboards, startTime: event?.startTime ?? null };
   } catch (error: any) {
     console.error("Error fetching leaderboard:", error);
     return { error: "Failed to load leaderboard" };

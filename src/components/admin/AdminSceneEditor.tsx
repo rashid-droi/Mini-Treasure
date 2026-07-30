@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Marker, Circle, Rectangle, useMap, useMapEvents } from "react-leaflet";
-import { Maximize, Minimize, RotateCcw, Target, Plus, Search, ZoomIn, ZoomOut } from "lucide-react";
+import { Maximize, Minimize, RotateCcw, Plus, ZoomIn, ZoomOut, Eye, EyeOff } from "lucide-react";
 
 interface AdminSceneEditorProps {
   sceneId: string;
@@ -22,9 +22,11 @@ interface AdminSceneEditorProps {
 // image is contained in the viewport and constrains panning to the image.
 const FitSceneBounds = ({
   sceneId,
+  maxZoom,
   onBounds
 }: {
   sceneId: string,
+  maxZoom: number,
   onBounds: (bounds: L.LatLngBounds) => void
 }) => {
   const map = useMap();
@@ -40,12 +42,13 @@ const FitSceneBounds = ({
       img.src = url;
     });
 
-    // Walk consecutive tiles from index 0 (grid is at most 8x8 at zoom 3),
+    // Walk consecutive tiles from index 0 (grid is at most 2^maxZoom wide),
     // keeping the last tile image so its real pixel size can be measured.
+    const gridLimit = Math.min(64, Math.pow(2, maxZoom));
     const probe = async (urlFor: (i: number) => string) => {
       let count = 1;
       let lastTile = await loadTile(urlFor(0));
-      for (let i = 1; i < 8; i++) {
+      for (let i = 1; i < gridLimit; i++) {
         const tile = await loadTile(urlFor(i));
         if (tile) {
           count = i + 1;
@@ -56,7 +59,7 @@ const FitSceneBounds = ({
     };
 
     (async () => {
-      const scale = Math.pow(2, 3); // map units = source pixels / 8
+      const scale = Math.pow(2, maxZoom); // map units = source pixels / 2^maxZoom
       let widthPx: number, heightPx: number;
 
       // Preferred: exact source dimensions from the tiler's meta.json. The
@@ -73,8 +76,8 @@ const FitSceneBounds = ({
         heightPx = meta.height;
       } else {
         // Fallback: measure the tile grid (works, but includes any white pad).
-        const colProbe = await probe(x => `/tiles/${sceneId}/3/0/${x}.jpg`);
-        const rowProbe = await probe(y => `/tiles/${sceneId}/3/${y}/0.jpg`);
+        const colProbe = await probe(x => `/tiles/${sceneId}/${maxZoom}/0/${x}.jpg`);
+        const rowProbe = await probe(y => `/tiles/${sceneId}/${maxZoom}/${y}/0.jpg`);
         if (cancelled) return;
         widthPx = (colProbe.count - 1) * 256 + (colProbe.lastTile?.naturalWidth ?? 256);
         heightPx = (rowProbe.count - 1) * 256 + (rowProbe.lastTile?.naturalHeight ?? 256);
@@ -105,7 +108,7 @@ const FitSceneBounds = ({
       cancelled = true;
       ro?.disconnect();
     };
-  }, [map, sceneId, onBounds]);
+  }, [map, sceneId, maxZoom, onBounds]);
 
   return null;
 };
@@ -113,10 +116,14 @@ const FitSceneBounds = ({
 // Custom UI Overlay for full control over zoom/fullscreen
 const ViewerControls = ({
   containerRef,
-  sceneBounds
+  sceneBounds,
+  showMarkers,
+  onToggleMarkers,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>,
-  sceneBounds: L.LatLngBounds | null
+  sceneBounds: L.LatLngBounds | null,
+  showMarkers: boolean,
+  onToggleMarkers: () => void,
 }) => {
   const map = useMap();
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -182,8 +189,20 @@ const ViewerControls = ({
           onClick={resetView}
           className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
           title="Reset View"
+          aria-label="Reset View"
         >
           <RotateCcw className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-2xl">
+        <button
+          onClick={onToggleMarkers}
+          className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
+          title={showMarkers ? "Hide object markers" : "Show object markers"}
+          aria-label={showMarkers ? "Hide object markers" : "Show object markers"}
+        >
+          {showMarkers ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
         </button>
       </div>
 
@@ -270,7 +289,7 @@ const createDivIcon = (html: string, className: string) => {
 export default function AdminSceneEditor({
   sceneId,
   clues,
-  clickTolerance = 30,
+  clickTolerance = 5,
   focusClueId = null,
   focusSignal = 0,
   onAddClue,
@@ -279,7 +298,31 @@ export default function AdminSceneEditor({
 }: AdminSceneEditorProps) {
   const [mounted, setMounted] = useState(false);
   const [sceneBounds, setSceneBounds] = useState<L.LatLngBounds | null>(null);
+  const [showMarkers, setShowMarkers] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // The tiler emits a different number of zoom levels per image (bigger images
+  // produce more levels). Detect the deepest level that actually exists so the
+  // image is measured and rendered at full resolution, instead of assuming a
+  // fixed max zoom (which misfits larger uploads into the top-left corner).
+  const [maxNativeZoom, setMaxNativeZoom] = useState(3);
+  useEffect(() => {
+    let cancelled = false;
+    const exists = (z: number) => new Promise<boolean>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = `/tiles/${sceneId}/${z}/0/0.jpg`;
+    });
+    (async () => {
+      let max = 0;
+      for (let z = 1; z <= 8; z++) {
+        if (await exists(z)) max = z; else break;
+      }
+      if (!cancelled && max > 0) setMaxNativeZoom(max);
+    })();
+    return () => { cancelled = true; };
+  }, [sceneId]);
 
   useEffect(() => {
     setMounted(true);
@@ -331,27 +374,33 @@ export default function AdminSceneEditor({
         zoomControl={false} // Custom controls used instead
         attributionControl={false}
       >
-        <FitSceneBounds sceneId={sceneId} onBounds={setSceneBounds} />
+        <FitSceneBounds sceneId={sceneId} maxZoom={maxNativeZoom} onBounds={setSceneBounds} />
         <MapEvents onMapClick={onAddClue} />
         <FocusController clue={clues.find(c => c.id === focusClueId) ?? null} signal={focusSignal} />
         
         {/* Deep Zoom Tile Layer */}
         <TileLayer
           // sharp's "google" tile layout is {z}/{y}/{x} (row folder, column file)
+          key={maxNativeZoom}
           url={`/tiles/${sceneId}/{z}/{y}/{x}.jpg`}
           noWrap={true}
-          maxNativeZoom={3} // tiles only exist up to zoom 3; upscale beyond that
+          maxNativeZoom={maxNativeZoom} // deepest tile level that exists; upscale beyond that
           bounds={[[-256, 0], [0, 256]]} // extent of the zoom-0 tile; no tiles exist outside this
           errorTileUrl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" // transparent fallback
         />
         
-        <ViewerControls containerRef={containerRef} sceneBounds={sceneBounds} />
+        <ViewerControls
+          containerRef={containerRef}
+          sceneBounds={sceneBounds}
+          showMarkers={showMarkers}
+          onToggleMarkers={() => setShowMarkers(v => !v)}
+        />
         <AddObjectButton onAddObject={onAddClue} />
 
         {/* Hotspot area for each clue, sized to its radius (or the scene
             default). Non-interactive so it never blocks the pin drag or a
             map click; it just shows the admin the real clickable target size. */}
-        {clues.map((clue) => {
+        {showMarkers && clues.map((clue) => {
           const r = clue.radius ?? clickTolerance;
           const isFocused = clue.id === focusClueId;
           // The focused hotspot gets a solid, brighter, thicker outline so it
@@ -361,15 +410,13 @@ export default function AdminSceneEditor({
                 color: "#059669",
                 weight: 3,
                 opacity: 1,
-                fillColor: "#10b981",
-                fillOpacity: 0.35,
+                fillOpacity: 0,
               }
             : {
                 color: "#f59e0b",
                 weight: 1.5,
                 opacity: 0.9,
-                fillColor: "#f59e0b",
-                fillOpacity: 0.15,
+                fillOpacity: 0,
                 dashArray: "4 4",
               };
           return clue.shape === "SQUARE" ? (
@@ -390,7 +437,7 @@ export default function AdminSceneEditor({
           );
         })}
 
-        {clues.map((clue) => (
+        {showMarkers && clues.map((clue) => (
           <Marker
             key={clue.id}
             position={[clue.targetY, clue.targetX]}

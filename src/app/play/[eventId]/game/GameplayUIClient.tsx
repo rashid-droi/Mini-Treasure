@@ -9,7 +9,7 @@ import LiveLeaderboard from "@/components/game/LiveLeaderboard";
 import SynchronizedTimer from "@/components/game/SynchronizedTimer";
 import { getNextClue } from "@/actions/gameplay";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Search, Lightbulb, CheckCircle2, HelpCircle, Minus, Plus, Trophy } from "lucide-react";
+import { MessageSquare, Search, CheckCircle2, HelpCircle, Minus, Plus, Trophy } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface GameplayEvent {
@@ -198,11 +198,6 @@ export default function GameplayUIClient({
     };
   }, [socket, userId, openSections.chat]);
 
-  const handleBuyHint = () => {
-    if (hintsUsed >= 3 || !activeClue) return;
-    socket?.emit("buy_hint", { teamId: team.id, eventId: event.id, clueId: activeClue.id });
-  };
-
   // Tapping an object button on the image submits that spot. The server scores
   // it correct only when it matches the team's current active clue.
   const handleObjectClick = (x: number, y: number) => {
@@ -307,33 +302,6 @@ export default function GameplayUIClient({
   );
 
   const renderQuestionArea = () => {
-    const helperText = (
-      <p className="text-sm text-zinc-500">
-        Having issues with the image? First,{" "}
-        <button onClick={() => window.location.reload()} className="text-[#e8842c] hover:underline">
-          refresh the page
-        </button>
-        , then{" "}
-        <a
-          href={`/play/test-viewer?sceneId=${encodeURIComponent(event.sceneId)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[#e8842c] hover:underline"
-        >
-          try this different viewer
-        </a>
-        {sceneGuideUrl && (
-          <>
-            . As a last resort,{" "}
-            <a href={sceneGuideUrl} target="_blank" rel="noopener noreferrer" className="text-[#e8842c] hover:underline">
-              open the image in a new tab
-            </a>
-          </>
-        )}
-        .
-      </p>
-    );
-
     return (
       <AnimatePresence mode="wait">
         {loadingClue ? (
@@ -349,11 +317,11 @@ export default function GameplayUIClient({
           <motion.div
             key="completed"
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-emerald-50 border border-emerald-200 p-8 rounded-2xl flex flex-col items-center justify-center text-center shadow-sm max-w-md"
+            className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex flex-col items-center justify-center text-center shadow-sm max-w-xs"
           >
-            <CheckCircle2 className="w-16 h-16 text-emerald-600 mb-4" />
-            <h2 className="text-2xl font-black text-emerald-950 mb-2">Hunt Complete!</h2>
-            <p className="text-emerald-800/90">You&apos;ve found all the targets. Check the leaderboard for your final ranking and bonuses!</p>
+            <CheckCircle2 className="w-9 h-9 text-emerald-600 mb-2" />
+            <h2 className="text-lg font-black text-emerald-950 mb-1">Hunt Complete!</h2>
+            <p className="text-emerald-800/90 text-xs">You&apos;ve found all the targets. Check the leaderboard for your final ranking and bonuses!</p>
           </motion.div>
         ) : activeClue ? (
           <motion.div
@@ -376,9 +344,8 @@ export default function GameplayUIClient({
               </p>
             </div>
 
-            {/* Right column: helper text + action */}
+            {/* Right column: action */}
             <div className="flex-1 flex flex-col justify-between gap-4 min-w-0">
-              {helperText}
 
               {activeClue.type === "QUESTION" ? (
                 <div className="flex flex-wrap items-center gap-3">
@@ -402,19 +369,9 @@ export default function GameplayUIClient({
                   </button>
                 </div>
               ) : (
-                <div className="flex flex-col items-start gap-2">
-                  <button
-                    onClick={handleBuyHint}
-                    disabled={hintsUsed >= 3}
-                    className="flex items-center gap-2 px-7 py-3 bg-[#f5c518] hover:bg-[#e6b800] disabled:bg-zinc-200 disabled:text-zinc-400 disabled:cursor-not-allowed text-zinc-900 font-semibold rounded-xl transition-colors shadow-sm"
-                  >
-                    <Lightbulb className="w-5 h-5" />
-                    {hintsUsed >= 3 ? "Max Hints Used" : "Buy Hint (-10)"}
-                  </button>
-                  {hintsUsed > 0 && (
-                    <span className="text-xs text-zinc-500">Hints used: {hintsUsed}/3</span>
-                  )}
-                </div>
+                <span className="text-[#e8842c] text-sm">
+                  Tap the object in the scene, then press “Submit this”.
+                </span>
               )}
             </div>
           </motion.div>

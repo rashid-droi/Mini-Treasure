@@ -57,6 +57,19 @@ export default async function AdminDashboard() {
     if (idx >= 0 && idx < 7) chartData[idx]++;
   }
 
+  // Group the leaderboard rows by event so the dashboard shows each event's own
+  // standings instead of one mixed list. Rows arrive already score-desc, so each
+  // group is ranked; order the groups by their top score.
+  const scoresByEvent = (() => {
+    const map = new Map<string, { eventId: string; eventName: string; rows: typeof topTeams }>();
+    for (const row of topTeams) {
+      const g = map.get(row.eventId) ?? { eventId: row.eventId, eventName: row.event.name, rows: [] as typeof topTeams };
+      g.rows.push(row);
+      map.set(row.eventId, g);
+    }
+    return [...map.values()].sort((a, b) => (b.rows[0]?.score ?? 0) - (a.rows[0]?.score ?? 0));
+  })();
+
   const stats = [
     {
       label: "Active Events",
@@ -137,29 +150,42 @@ export default async function AdminDashboard() {
           <h3 className="font-semibold text-zinc-900 flex items-center gap-2 mb-4">
             <Trophy className="w-5 h-5 text-[#c99a00]" />
             Team Scores
-            {topTeams.length > 0 && (
-              <span className="ml-auto text-xs font-medium text-zinc-400">{topTeams.length} teams</span>
+            {scoresByEvent.length > 0 && (
+              <span className="ml-auto text-xs font-medium text-zinc-400">
+                {scoresByEvent.length} event{scoresByEvent.length > 1 ? "s" : ""}
+              </span>
             )}
           </h3>
-          {topTeams.length > 0 ? (
-            <ul className="space-y-3 max-h-80 overflow-y-auto pr-1">
-              {topTeams.map((row, i) => (
-                <li key={row.id} className="flex items-center gap-3">
-                  <span className="w-6 flex justify-center">
-                    {i < 3 ? (
-                      <Medal className={`w-5 h-5 ${medalTint[i]}`} />
-                    ) : (
-                      <span className="text-sm font-bold text-zinc-400">{i + 1}</span>
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-zinc-900 truncate">{row.team.name}</p>
-                    <p className="text-xs text-zinc-400 truncate">{row.event.name}</p>
+          {scoresByEvent.length > 0 ? (
+            <div className="space-y-5 max-h-80 overflow-y-auto pr-1">
+              {scoresByEvent.map((group) => (
+                <div key={group.eventId}>
+                  <div className="flex items-center justify-between mb-2 sticky top-0 bg-white py-0.5">
+                    <p className="text-xs font-bold uppercase tracking-wide text-[#a8820a] truncate">
+                      {group.eventName}
+                    </p>
+                    <span className="text-[10px] text-zinc-400 shrink-0 ml-2">
+                      {group.rows.length} team{group.rows.length > 1 ? "s" : ""}
+                    </span>
                   </div>
-                  <span className="font-bold text-zinc-900 shrink-0">{row.score.toLocaleString()}</span>
-                </li>
+                  <ul className="space-y-2">
+                    {group.rows.map((row, i) => (
+                      <li key={row.id} className="flex items-center gap-3">
+                        <span className="w-6 flex justify-center">
+                          {i < 3 ? (
+                            <Medal className={`w-5 h-5 ${medalTint[i]}`} />
+                          ) : (
+                            <span className="text-sm font-bold text-zinc-400">{i + 1}</span>
+                          )}
+                        </span>
+                        <p className="min-w-0 flex-1 font-semibold text-zinc-900 truncate">{row.team.name}</p>
+                        <span className="font-bold text-zinc-900 shrink-0">{row.score.toLocaleString()}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ))}
-            </ul>
+            </div>
           ) : (
             <div className="h-40 flex items-center justify-center text-zinc-400 text-sm">
               No scores yet.

@@ -31,10 +31,12 @@ interface SceneViewerProps {
 // parent so the container can be sized to match the image exactly.
 const FitSceneBounds = ({
   sceneId,
+  maxZoom,
   onBounds,
   onAspectRatio
 }: {
   sceneId: string,
+  maxZoom: number,
   onBounds: (bounds: L.LatLngBounds) => void,
   onAspectRatio?: (ratio: number) => void
 }) => {
@@ -50,12 +52,13 @@ const FitSceneBounds = ({
       img.src = url;
     });
 
-    // Walk consecutive tiles from index 0 (grid is at most 8x8 at zoom 3),
+    // Walk consecutive tiles from index 0 (grid is at most 2^maxZoom wide),
     // keeping the last tile image so its real pixel size can be measured.
+    const gridLimit = Math.min(64, Math.pow(2, maxZoom));
     const probe = async (urlFor: (i: number) => string) => {
       let count = 1;
       let lastTile = await loadTile(urlFor(0));
-      for (let i = 1; i < 8; i++) {
+      for (let i = 1; i < gridLimit; i++) {
         const tile = await loadTile(urlFor(i));
         if (tile) {
           count = i + 1;
@@ -66,7 +69,7 @@ const FitSceneBounds = ({
     };
 
     (async () => {
-      const scale = Math.pow(2, 3); // map units = source pixels / 8
+      const scale = Math.pow(2, maxZoom); // map units = source pixels / 2^maxZoom
       let widthPx: number, heightPx: number;
 
       // Preferred: exact source dimensions from the tiler's meta.json. The
@@ -83,8 +86,8 @@ const FitSceneBounds = ({
         heightPx = meta.height;
       } else {
         // Fallback: measure the tile grid (works, but includes any white pad).
-        const colProbe = await probe(x => `/tiles/${sceneId}/3/0/${x}.jpg`);
-        const rowProbe = await probe(y => `/tiles/${sceneId}/3/${y}/0.jpg`);
+        const colProbe = await probe(x => `/tiles/${sceneId}/${maxZoom}/0/${x}.jpg`);
+        const rowProbe = await probe(y => `/tiles/${sceneId}/${maxZoom}/${y}/0.jpg`);
         if (cancelled) return;
         widthPx = (colProbe.count - 1) * 256 + (colProbe.lastTile?.naturalWidth ?? 256);
         heightPx = (rowProbe.count - 1) * 256 + (rowProbe.lastTile?.naturalHeight ?? 256);
@@ -104,7 +107,7 @@ const FitSceneBounds = ({
     })();
 
     return () => { cancelled = true; };
-  }, [map, sceneId, onBounds, onAspectRatio]);
+  }, [map, sceneId, maxZoom, onBounds, onAspectRatio]);
 
   return null;
 };
@@ -303,11 +306,33 @@ export default function SceneViewerInternal({
   // Close the selection panel whenever the active question changes.
   useEffect(() => { setSelected(null); }, [activeClue?.id]);
 
+  // The tiler emits a different number of zoom levels per image (bigger images
+  // produce more levels). Detect the deepest level that actually exists so we
+  // render at full resolution and fit against the correct level, instead of
+  // assuming a fixed max zoom (which misfits larger uploads).
+  const [maxNativeZoom, setMaxNativeZoom] = useState(3);
+  useEffect(() => {
+    let cancelled = false;
+    const exists = (z: number) => new Promise<boolean>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = `/tiles/${sceneId}/${z}/0/0.jpg`;
+    });
+    (async () => {
+      let max = 0;
+      for (let z = 1; z <= 8; z++) {
+        if (await exists(z)) max = z; else break;
+      }
+      if (!cancelled && max > 0) setMaxNativeZoom(max);
+    })();
+    return () => { cancelled = true; };
+  }, [sceneId]);
+
   // Custom glowing icon for completed clues
   const glowingIcon = new L.DivIcon({
     html: `
       <div class="relative w-full h-full flex items-center justify-center">
-        <div class="absolute inset-0 bg-emerald-500/20 rounded-full animate-ping"></div>
         <div class="absolute inset-2 border-2 border-emerald-400 rounded-full shadow-[0_0_15px_rgba(52,211,153,0.8)]"></div>
         <div class="w-3 h-3 bg-emerald-400 rounded-full shadow-lg"></div>
       </div>
@@ -337,7 +362,7 @@ export default function SceneViewerInternal({
         keyboard={true}
         attributionControl={false}
       >
-        <FitSceneBounds sceneId={sceneId} onBounds={setSceneBounds} onAspectRatio={onAspectRatio} />
+        <FitSceneBounds sceneId={sceneId} maxZoom={maxNativeZoom} onBounds={setSceneBounds} onAspectRatio={onAspectRatio} />
         <ResizeHandler sceneBounds={sceneBounds} />
         <HintCameraController activeClue={activeClue} hintsUsed={hintsUsed} />
         <MapClickHandler
@@ -349,10 +374,11 @@ export default function SceneViewerInternal({
 
         <TileLayer
           // sharp's "google" tile layout is {z}/{y}/{x} (row folder, column file)
+          key={maxNativeZoom}
           url={`/tiles/${sceneId}/{z}/{y}/{x}.jpg`}
           errorTileUrl={`/tiles/${sceneId}/blank.png`}
           noWrap={true}
-          maxNativeZoom={3}
+          maxNativeZoom={maxNativeZoom}
           bounds={[
             [-256, 0],
             [0, 256]

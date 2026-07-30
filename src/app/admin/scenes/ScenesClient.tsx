@@ -12,7 +12,7 @@ export default function ScenesClient({ scenes }: { scenes: any[] }) {
 
   const [formData, setFormData] = useState({
     name: "",
-    clickTolerance: 60
+    clickTolerance: 5
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
 
@@ -32,7 +32,7 @@ export default function ScenesClient({ scenes }: { scenes: any[] }) {
     else {
       toast.success("Scene uploaded and tiled!");
       setIsModalOpen(false);
-      setFormData({ name: "", clickTolerance: 60 });
+      setFormData({ name: "", clickTolerance: 5 });
       setImageFile(null);
     }
     setLoading(false);

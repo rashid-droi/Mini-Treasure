@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { createClue, updateClue, updateClueLocation, deleteClue } from "@/actions/admin/clues";
+import { updateSceneClickTolerance, applyHotspotSizeToAllClues } from "@/actions/admin/scenes";
 import { OBJECT_LIBRARY } from "@/lib/objectLibrary";
 import { Loader2, Plus, Trash2, Crosshair, HelpCircle, FileText, Image as ImageIcon, MapPin, Search, Check, X, Circle as CircleIcon, Square } from "lucide-react";
 import Link from "next/link";
@@ -59,7 +60,7 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
 
   // Editing an existing clue: opened by clicking its marker (or sidebar card),
   // pre-filled with the clue's current values including its answer.
-  const defaultRadius = scene.clickTolerance ?? 30;
+  const [defaultRadius, setDefaultRadius] = useState(scene.clickTolerance ?? 5);
   const [editingClueId, setEditingClueId] = useState<string | null>(null);
   // Original hotspot when the editor opened, so Cancel can undo live-preview edits.
   const [editOriginal, setEditOriginal] = useState<{ radius: number; shape: "CIRCLE" | "SQUARE" } | null>(null);
@@ -117,6 +118,32 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
     }
   };
 
+  const defaultRadiusSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleDefaultRadiusChange = (radius: number) => {
+    setDefaultRadius(radius);
+    if (defaultRadiusSaveTimer.current) clearTimeout(defaultRadiusSaveTimer.current);
+    defaultRadiusSaveTimer.current = setTimeout(async () => {
+      const res = await updateSceneClickTolerance(scene.id, radius);
+      if (res.error) toast.error(res.error);
+    }, 400);
+  };
+
+  const [applyingHotspotSize, setApplyingHotspotSize] = useState(false);
+  const handleApplyHotspotToAll = async () => {
+    setApplyingHotspotSize(true);
+    const res = await applyHotspotSizeToAllClues(scene.id, defaultRadius);
+    if (res.error) {
+      toast.error(res.error);
+    } else {
+      setClues(prev => prev.map(c => ({ ...c, radius: null })));
+      if (editingClueId) {
+        setEditFormData(prev => ({ ...prev, radius: defaultRadius }));
+      }
+      toast.success(`All ${res.data?.cluesUpdated ?? clues.length} objects set to ${defaultRadius}px`);
+    }
+    setApplyingHotspotSize(false);
+  };
+
   const handleUpdateClue = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingClueId) return;
@@ -164,7 +191,7 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
       ...clueData,
       targetX: newClueCoords.x,
       targetY: newClueCoords.y,
-      radius: defaultRadius, // start at the scene default; fine-tune in the editor
+      radius: null, // inherit scene default; fine-tune per object in the editor
       shape: "CIRCLE",
       options: optionsText.split("\n").map(o => o.trim()).filter(Boolean),
       correctAnswer: correctAnswer.trim() || null
@@ -238,6 +265,30 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
               <X className="w-3 h-3" /> Cancel placement
             </button>
           )}
+          <div className="mt-4 pt-4 border-t border-zinc-200">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-medium text-zinc-600">Default hotspot size</label>
+              <span className="text-xs font-mono text-[#a8820a] bg-[#f5c518]/15 px-2 py-0.5 rounded">{Math.round(defaultRadius)} px</span>
+            </div>
+            <input
+              type="range"
+              min={2}
+              max={80}
+              step={1}
+              value={defaultRadius}
+              onChange={e => handleDefaultRadiusChange(parseInt(e.target.value))}
+              className="w-full accent-[#f5c518]"
+            />
+            <p className="text-xs text-zinc-400 mt-1">Size of dashed circles for objects without a custom hotspot.</p>
+            <button
+              type="button"
+              onClick={handleApplyHotspotToAll}
+              disabled={applyingHotspotSize}
+              className="mt-2 w-full text-xs font-medium py-2 px-3 rounded-lg border border-[#f5c518]/40 bg-[#f5c518]/10 text-[#a8820a] hover:bg-[#f5c518]/20 disabled:opacity-50 transition-colors"
+            >
+              {applyingHotspotSize ? "Applying…" : `Apply ${Math.round(defaultRadius)}px to all objects`}
+            </button>
+          </div>
         </div>
 
         {/* Sidebar Tabs */}

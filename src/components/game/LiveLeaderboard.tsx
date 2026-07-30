@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { getEventLeaderboard } from "@/actions/leaderboard";
 import { useSocket } from "@/components/SocketProvider";
-import { Loader2, Trophy, Clock, Star, Medal } from "lucide-react";
+import { Loader2, Trophy, Star, Medal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 type LeaderboardRow = {
@@ -12,6 +12,7 @@ type LeaderboardRow = {
   score: number;
   bonusPoints: number;
   completionTimeMs: number | null;
+  submittedAt: string | Date | null;
   updatedAt: Date;
 };
 
@@ -29,6 +30,7 @@ export default function LiveLeaderboard({ eventId, myTeamId, light = false }: { 
     else if (res.data) setStandings(res.data as any);
     setLoading(false);
   }, [eventId]);
+
 
   useEffect(() => {
     fetchStandings();
@@ -71,21 +73,13 @@ export default function LiveLeaderboard({ eventId, myTeamId, light = false }: { 
     </div>
   );
 
-  const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const m = Math.floor(totalSeconds / 60);
-    const s = totalSeconds % 60;
-    return `${m}m ${s}s`;
-  };
-
   return (
     <div className="space-y-4">
       <div className={`grid grid-cols-12 gap-4 text-xs font-bold text-zinc-500 uppercase tracking-wider px-6 pb-2 border-b ${light ? "border-zinc-200" : "border-white/5"}`}>
         <div className="col-span-1 text-center">Rank</div>
-        <div className="col-span-4">Team</div>
-        <div className="col-span-2 text-right">Score</div>
-        <div className="col-span-2 text-right">Bonus</div>
-        <div className="col-span-3 text-right">Time</div>
+        <div className="col-span-5">Team</div>
+        <div className="col-span-3 text-right">Score</div>
+        <div className="col-span-3 text-right">Bonus</div>
       </div>
 
       <div className="space-y-3 relative">
@@ -128,7 +122,7 @@ export default function LiveLeaderboard({ eventId, myTeamId, light = false }: { 
                   {isTop3 ? <Medal className="w-6 h-6" /> : <span className="text-lg font-black">{index + 1}</span>}
                 </div>
                 
-                <div className="col-span-4 flex flex-col">
+                <div className="col-span-5 flex flex-col">
                   <span className={`font-bold text-lg flex items-center gap-2 ${isTop3 ? "" : light ? "text-zinc-800" : "text-zinc-200"}`}>
                     {row.team.name}
                     {isMe && (
@@ -142,19 +136,13 @@ export default function LiveLeaderboard({ eventId, myTeamId, light = false }: { 
                   </span>
                 </div>
                 
-                <div className="col-span-2 text-right font-black text-xl flex items-center justify-end gap-1">
-                  {/* Subtle pop animation on score change could be added here by wrapping the number, but layout handles the row well */}
+                <div className="col-span-3 text-right font-black text-xl flex items-center justify-end gap-1">
                   {row.score}
                 </div>
-                
-                <div className="col-span-2 text-right font-medium flex items-center justify-end gap-1 opacity-80">
+
+                <div className="col-span-3 text-right font-medium flex items-center justify-end gap-1 opacity-80">
                   <Star className="w-3 h-3" />
                   {row.bonusPoints}
-                </div>
-                
-                <div className="col-span-3 text-right font-medium flex items-center justify-end gap-1 opacity-80">
-                  <Clock className="w-3 h-3" />
-                  {row.completionTimeMs ? formatTime(row.completionTimeMs) : "---"}
                 </div>
               </motion.div>
             );
