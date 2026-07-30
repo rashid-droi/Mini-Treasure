@@ -34,14 +34,14 @@ export async function updateEventStatus(id: string, status: any) {
   try {
     const data: { status: any; startTime?: Date; endTime?: Date | null } = { status };
 
-    // Stamp the clock the first time an event goes ACTIVE: startTime drives the
-    // in-game timer, and endTime gives it a countdown target when a duration is
-    // set. Only set once so re-activating never resets a running game.
     if (status === "ACTIVE") {
       const existing = await prisma.event.findUnique({
         where: { id },
-        select: { startTime: true, gameDuration: true },
+        select: { startTime: true, gameDuration: true, sceneId: true },
       });
+      if (!existing?.sceneId) {
+        return { error: "Assign a scene to this event before setting it to Active." };
+      }
       if (existing && !existing.startTime) {
         const now = new Date();
         data.startTime = now;
@@ -66,5 +66,22 @@ export async function deleteEvent(id: string) {
     return { success: true };
   } catch (err) {
     return { error: "Failed to delete event." };
+  }
+}
+
+export async function updateEventScene(id: string, sceneId: string) {
+  try {
+    if (!sceneId) {
+      return { error: "Please select a scene." };
+    }
+    const scene = await prisma.scene.findUnique({ where: { id: sceneId } });
+    if (!scene) {
+      return { error: "Scene not found." };
+    }
+    await prisma.event.update({ where: { id }, data: { sceneId } });
+    revalidatePath("/admin/events");
+    return { success: true };
+  } catch (err) {
+    return { error: "Failed to update scene." };
   }
 }

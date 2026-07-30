@@ -106,6 +106,9 @@ export async function joinEventByCode(prevState: unknown, formData: FormData) {
     if (event.status === "COMPLETED") {
       return { error: "This event has already finished." };
     }
+    if (!event.sceneId) {
+      return { error: "This event is not ready yet — the host must assign a scene in the admin panel before players can join." };
+    }
 
     eventId = event.id;
     const isTeamMode = event.mode === "TEAM";

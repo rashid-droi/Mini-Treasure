@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { ClueType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 

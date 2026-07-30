@@ -79,9 +79,20 @@ export default async function GameplayRoute({
     }
   }
 
+  if (!event.sceneId || !event.scene) {
+    return (
+      <div className="min-h-screen bg-[#fafafa] flex flex-col items-center justify-center text-zinc-900 text-center p-8">
+        <h1 className="text-2xl font-bold mb-2">No scene assigned</h1>
+        <p className="text-zinc-500 max-w-md">
+          This event does not have a scene yet. Ask the organizer to pick a scene in the admin panel before gameplay can start.
+        </p>
+      </div>
+    );
+  }
+
   // Fetch all clues for the map setup
   const clues = await prisma.clue.findMany({
-    where: { sceneId: event.sceneId! }
+    where: { sceneId: event.sceneId }
   });
 
   // Fetch already found clues
@@ -96,7 +107,7 @@ export default async function GameplayRoute({
       event={{
         id: event.id,
         name: event.name,
-        sceneId: event.sceneId!,
+        sceneId: event.sceneId,
         startTime: event.startTime?.toISOString() ?? "",
         endTime: event.endTime?.toISOString() ?? "",
         gameDuration: event.gameDuration

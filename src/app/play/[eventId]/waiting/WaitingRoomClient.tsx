@@ -133,6 +133,7 @@ export default function WaitingRoomClient({ eventId }: { eventId: string }) {
   // didn't click the button.
   useEffect(() => {
     if (!data || launching) return;
+    if (!data.event.sceneId) return;
     const allReady = data.players.length > 0 && data.players.every(p => p.isReady);
     const canStart = allReady && data.event.status === "ACTIVE";
     if (canStart) enterGameplay();
@@ -203,9 +204,10 @@ export default function WaitingRoomClient({ eventId }: { eventId: string }) {
   );
 
   const currentUser = data.players.find(p => p.user.id === data.userId);
+  const hasScene = Boolean(data.event.sceneId);
   // A player can enter once the host has started the event and they themselves
   // are ready — no need to wait for every other player (e.g. idle/stuck ones).
-  const canEnter = data.event.status === "ACTIVE" && !!currentUser?.isReady;
+  const canEnter = hasScene && data.event.status === "ACTIVE" && !!currentUser?.isReady;
 
   return (
     <div className="min-h-screen bg-[#fafafa] p-4 md:p-8 flex flex-col items-center justify-center">
@@ -213,6 +215,12 @@ export default function WaitingRoomClient({ eventId }: { eventId: string }) {
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-medium rounded-full flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
           Reconnecting...
+        </div>
+      )}
+
+      {!hasScene && (
+        <div className="w-full max-w-6xl mb-4 px-4 py-3 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl text-center">
+          This event has no scene yet. Ask the host to pick one in Admin → Events before the game can start.
         </div>
       )}
 

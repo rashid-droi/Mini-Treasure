@@ -132,14 +132,19 @@ export default function EventForm({ scenes }: { scenes: Scene[] }) {
 
         <div className="space-y-2 md:col-span-2">
           <label className="text-sm font-medium text-zinc-600 uppercase tracking-wider">Scene Selection</label>
-          <select 
+          <select
             name="sceneId"
+            required
+            defaultValue={scenes[0]?.id ?? ""}
             className="w-full bg-white border border-zinc-300 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-2 focus:ring-[#f5c518] transition-all appearance-none"
           >
-            <option value="">-- No Scene Selected --</option>
-            {scenes.map((scene) => (
-              <option key={scene.id} value={scene.id}>{scene.name}</option>
-            ))}
+            {scenes.length === 0 ? (
+              <option value="">No scenes available — upload one first</option>
+            ) : (
+              scenes.map((scene) => (
+                <option key={scene.id} value={scene.id}>{scene.name}</option>
+              ))
+            )}
           </select>
           <p className="text-xs text-zinc-500 mt-1">An event can only have one scene at a time.</p>
         </div>

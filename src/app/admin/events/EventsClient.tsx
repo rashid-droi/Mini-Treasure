@@ -1,12 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { updateEventStatus, deleteEvent } from "@/actions/admin/events";
+import { updateEventStatus, deleteEvent, updateEventScene } from "@/actions/admin/events";
 import { Plus, Trash2, Settings, Play, StopCircle, BarChart3, Edit2, Copy, Check, Users } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 
-export default function EventsClient({ events }: { events: any[] }) {
+export default function EventsClient({
+  events,
+  scenes,
+}: {
+  events: any[];
+  scenes: { id: string; name: string }[];
+}) {
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
   const handleCopyCode = async (code: string) => {
@@ -31,6 +37,12 @@ export default function EventsClient({ events }: { events: any[] }) {
     const res = await updateEventStatus(id, status);
     if (res.error) toast.error(res.error);
     else toast.success("Status updated!");
+  };
+
+  const handleSceneChange = async (id: string, sceneId: string) => {
+    const res = await updateEventScene(id, sceneId);
+    if (res.error) toast.error(res.error);
+    else toast.success("Scene updated!");
   };
 
   return (
@@ -97,7 +109,28 @@ export default function EventsClient({ events }: { events: any[] }) {
                       </div>
                     )}
                   </td>
-                  <td className="px-6 py-4">{event.scene?.name || "No Scene"}</td>
+                  <td className="px-6 py-4">
+                    {scenes.length === 0 ? (
+                      <span className="text-rose-500 text-sm">No scenes</span>
+                    ) : (
+                      <select
+                        value={event.sceneId ?? ""}
+                        onChange={(e) => handleSceneChange(event.id, e.target.value)}
+                        className={`px-2 py-1 rounded-lg text-sm border outline-none bg-white ${
+                          event.sceneId
+                            ? "border-zinc-200 text-zinc-700"
+                            : "border-rose-300 text-rose-600"
+                        }`}
+                      >
+                        <option value="">— Pick scene —</option>
+                        {scenes.map((scene) => (
+                          <option key={scene.id} value={scene.id}>
+                            {scene.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <span
                       className={`px-2.5 py-1 rounded-full text-xs font-bold border ${

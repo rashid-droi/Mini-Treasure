@@ -25,7 +25,7 @@ export async function getWaitingRoomState(eventId: string) {
 
     const event = await prisma.event.findUnique({
       where: { id: eventId },
-      select: { id: true, name: true, description: true, status: true, scene: { select: { name: true } } }
+      select: { id: true, name: true, description: true, status: true, sceneId: true, scene: { select: { name: true } } }
     });
 
     // Everyone who has joined the event, across all teams

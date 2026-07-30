@@ -46,6 +46,10 @@ export async function createEvent(prevState: unknown, formData: FormData) {
     return { error: "Name and Status are required fields." };
   }
 
+  if (!sceneId) {
+    return { error: "Please select a scene for this event." };
+  }
+
   const gameDuration = gameDurationStr ? parseInt(gameDurationStr, 10) : null;
   const maxTeams = maxTeamsStr ? parseInt(maxTeamsStr, 10) : null;
   const mode = modeStr === "TEAM" ? "TEAM" : "INDIVIDUAL";
@@ -72,7 +76,7 @@ export async function createEvent(prevState: unknown, formData: FormData) {
           maxTeamSize,
           mode,
           status: statusStr,
-          sceneId: sceneId || null,
+          sceneId,
           // Pre-create the teams (TEAM mode) so joining players can be auto-
           // assigned across them — no separate "pick a team" step.
           teams: teamCount > 0
