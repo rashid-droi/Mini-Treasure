@@ -116,7 +116,7 @@ export async function createSceneFromUpload(formData: FormData) {
     // Tile from an in-memory JPEG so we can record the EXACT tiled dimensions in
     // meta.json — the viewer reads it to crop the white edge-padding the google
     // layout adds, giving a pixel-perfect fit with no probing.
-    const { data: jpegBuffer, info } = await img.jpeg({ quality: 80 }).toBuffer({ resolveWithObject: true });
+    const { data: jpegBuffer, info } = await img.jpeg({ quality: 92, mozjpeg: true }).toBuffer({ resolveWithObject: true });
     await sharp(jpegBuffer).tile({ size: 256, layout: "google" }).toFile(outputDir);
     fs.writeFileSync(path.join(outputDir, "meta.json"), JSON.stringify({ width: info.width, height: info.height }));
 

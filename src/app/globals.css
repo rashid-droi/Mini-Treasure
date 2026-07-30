@@ -27,8 +27,78 @@ body {
   background: transparent;
 }
 
+/* Sharper scene tiles — native resolution on retina, no soft fade-in */
+.scene-map .leaflet-tile {
+  image-rendering: auto;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.scene-map.leaflet-container .leaflet-fade-anim .leaflet-tile {
+  transition: none;
+}
+
 /* Invisible hidden-object hotspots in the game scene: keep the map's grab
    cursor so hovering an object doesn't reveal it via a pointer cursor */
 .leaflet-interactive.hidden-hotspot {
   cursor: grab;
+}
+
+/* Admin scene editor: clue name centered inside the hotspot circle */
+.leaflet-tooltip.admin-hotspot-tooltip {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  pointer-events: none;
+  color: inherit;
+  white-space: normal;
+  width: max-content;
+  max-width: none;
+}
+
+.leaflet-tooltip.admin-hotspot-tooltip::before {
+  display: none;
+}
+
+.admin-hotspot-tooltip__text {
+  display: block;
+  width: max-content;
+  max-width: none;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #b45309;
+  background: rgba(245, 197, 24, 0.92);
+  border: 1px solid rgba(180, 83, 9, 0.35);
+  border-radius: 4px;
+  padding: 2px 6px;
+  text-shadow: none;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+.admin-hotspot-tooltip__text--focused {
+  color: #065f46;
+  background: rgba(167, 243, 208, 0.95);
+  border-color: rgba(5, 150, 105, 0.45);
+}
+
+.admin-hotspot-drag-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.admin-hotspot-drag-handle {
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  cursor: grab;
+  border-radius: 9999px;
+}
+
+.admin-hotspot-drag-handle:active {
+  cursor: grabbing;
 }

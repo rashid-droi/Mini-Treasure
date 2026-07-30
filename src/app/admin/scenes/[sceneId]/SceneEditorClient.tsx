@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { createClue, updateClue, updateClueLocation, deleteClue } from "@/actions/admin/clues";
 import { updateSceneClickTolerance, applyHotspotSizeToAllClues } from "@/actions/admin/scenes";
 import { OBJECT_LIBRARY } from "@/lib/objectLibrary";
-import { Loader2, Plus, Trash2, Crosshair, HelpCircle, FileText, Image as ImageIcon, MapPin, Search, Check, X, Circle as CircleIcon, Square } from "lucide-react";
+import { Loader2, Plus, Trash2, Crosshair, HelpCircle, FileText, Image as ImageIcon, MapPin, Search, Check, X, Circle as CircleIcon, Square, PanelLeftClose } from "lucide-react";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { useAdminShell } from "@/components/admin/AdminShellContext";
+import SceneEditorResizeRail from "./SceneEditorResizeRail";
 
 // Dynamically import the Leaflet map to prevent SSR window errors
 const AdminSceneEditor = dynamic(() => import("@/components/admin/AdminSceneEditor"), { 
@@ -16,8 +18,14 @@ const AdminSceneEditor = dynamic(() => import("@/components/admin/AdminSceneEdit
 });
 
 const CLUE_TYPES = ["TEXT", "IMAGE", "RIDDLE", "LOCATION", "OBJECT", "QUESTION"];
+const SIDEBAR_WIDTH_KEY = "scene-editor-sidebar-width";
+const SIDEBAR_MIN = 240;
+const SIDEBAR_MAX = 520;
+const SIDEBAR_DEFAULT = 300;
 
 export default function SceneEditorClient({ scene, initialClues }: { scene: any, initialClues: any[] }) {
+  const { navWidth } = useAdminShell();
+  const [isDesktop, setIsDesktop] = useState(false);
   const [clues, setClues] = useState(initialClues);
   const [selectedClueId, setSelectedClueId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -129,6 +137,64 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
   };
 
   const [applyingHotspotSize, setApplyingHotspotSize] = useState(false);
+
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const dragStart = useRef<{ x: number; w: number } | null>(null);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    if (saved) {
+      const w = parseInt(saved, 10);
+      if (Number.isFinite(w)) setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, w)));
+    }
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
+  const onResizeStart = useCallback((clientX: number) => {
+    dragStart.current = { x: clientX, w: sidebarWidth };
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const onMove = (e: MouseEvent) => {
+      if (!dragStart.current) return;
+      const delta = e.clientX - dragStart.current.x;
+      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, dragStart.current.w + delta));
+      setSidebarWidth(next);
+    };
+
+    const onUp = () => {
+      dragStart.current = null;
+      setIsResizing(false);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setSidebarWidth(w => {
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(w));
+        return w;
+      });
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isResizing]);
+
   const handleApplyHotspotToAll = async () => {
     setApplyingHotspotSize(true);
     const res = await applyHotspotSizeToAllClues(scene.id, defaultRadius);
@@ -243,11 +309,29 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
     }
   };
 
-  return (
-    <div className="flex h-[calc(100vh-80px)] -m-8 overflow-hidden bg-[#fafafa] animate-in fade-in duration-500">
+  const editorLeft = isDesktop ? navWidth : 0;
 
-      {/* Sidebar */}
-      <div className="w-96 bg-white border-r border-zinc-200 flex flex-col z-10 shadow-sm">
+  return (
+    <div
+      className="fixed top-0 right-0 bottom-0 z-30 flex overflow-hidden bg-[#fafafa] animate-in fade-in duration-500 transition-[left] duration-300"
+      style={{ left: editorLeft }}
+    >
+
+      {/* Object library sidebar — width is drag-adjustable */}
+      {!sidebarCollapsed && (
+        <div
+          className="shrink-0 h-full relative bg-white border-r border-zinc-200 flex flex-col min-h-0 z-10 shadow-sm"
+          style={{ width: sidebarWidth }}
+        >
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(true)}
+          className="absolute top-3 right-2 z-20 p-1 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors"
+          title="Hide object library"
+          aria-label="Hide object library"
+        >
+          <PanelLeftClose className="w-3.5 h-3.5" />
+        </button>
         <div className="p-6 border-b border-zinc-200 bg-zinc-50">
           <Link href="/admin/scenes" className="text-sm text-[#e8842c] hover:underline mb-4 inline-block font-medium">&larr; Back to Scenes</Link>
           <h1 className="text-2xl font-black text-zinc-900">{scene.name}</h1>
@@ -379,7 +463,7 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
               <div className="flex justify-between items-start mb-2">
                 <div className="flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-zinc-100 text-xs flex items-center justify-center font-bold text-zinc-500 border border-zinc-200">{idx + 1}</span>
-                  <h4 className="font-bold text-zinc-900">{clue.name}</h4>
+                  <h4 className="font-bold text-[#b45309]">{clue.name}</h4>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleDeleteClue(clue.id); }}
@@ -406,16 +490,25 @@ export default function SceneEditorClient({ scene, initialClues }: { scene: any,
           )}
         </div>
         )}
-      </div>
+        </div>
+      )}
+
+      <SceneEditorResizeRail
+        sidebarCollapsed={sidebarCollapsed}
+        isResizing={isResizing}
+        onResizeStart={onResizeStart}
+        onExpand={() => setSidebarCollapsed(false)}
+      />
 
       {/* Main Map Area */}
-      <div className="flex-1 relative bg-zinc-100">
+      <div className="flex-1 min-w-0 relative bg-zinc-100">
         <AdminSceneEditor
           sceneId={scene.id}
           clues={clues}
           clickTolerance={defaultRadius}
           focusClueId={focusedClueId}
           focusSignal={focusSignal}
+          layoutRevision={sidebarWidth + (sidebarCollapsed ? 0 : 1000) + editorLeft}
           onAddClue={handleMapClick}
           onUpdateClue={handleUpdateClueCoords}
           onSelectClue={openClueEditor}

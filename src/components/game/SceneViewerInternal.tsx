@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { MapContainer, TileLayer, Marker, Circle, Rectangle, useMap, useMapEvents } from "react-leaflet";
+import { fetchSceneMaxNativeZoom, SCENE_TILE_LAYER_PROPS } from "@/lib/sceneTiles";
 import { Maximize, Minimize, RotateCcw, Eye, EyeOff } from "lucide-react";
 
 interface SceneViewerProps {
@@ -100,6 +101,7 @@ const FitSceneBounds = ({
       // image's aspect ratio this fills the frame edge-to-edge.
       const containZoom = map.getBoundsZoom(bounds, false);
       map.setMinZoom(containZoom);
+      map.setMaxZoom(maxZoom);
       map.setView(bounds.getCenter(), containZoom);
       map.setMaxBounds(bounds);
       onBounds(bounds);
@@ -310,22 +312,12 @@ export default function SceneViewerInternal({
   // produce more levels). Detect the deepest level that actually exists so we
   // render at full resolution and fit against the correct level, instead of
   // assuming a fixed max zoom (which misfits larger uploads).
-  const [maxNativeZoom, setMaxNativeZoom] = useState(3);
+  const [maxNativeZoom, setMaxNativeZoom] = useState(5);
   useEffect(() => {
     let cancelled = false;
-    const exists = (z: number) => new Promise<boolean>((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = `/tiles/${sceneId}/${z}/0/0.jpg`;
+    fetchSceneMaxNativeZoom(sceneId).then(z => {
+      if (!cancelled) setMaxNativeZoom(z);
     });
-    (async () => {
-      let max = 0;
-      for (let z = 1; z <= 8; z++) {
-        if (await exists(z)) max = z; else break;
-      }
-      if (!cancelled && max > 0) setMaxNativeZoom(max);
-    })();
     return () => { cancelled = true; };
   }, [sceneId]);
 
@@ -354,10 +346,13 @@ export default function SceneViewerInternal({
         center={[0, 0]}
         zoom={1}
         minZoom={0}
-        maxZoom={5}
+        maxZoom={maxNativeZoom}
         zoomSnap={0} // free fractional zoom so the contain-fit is exact, no letterboxing
         maxBoundsViscosity={1.0} // hard stop at the image edges instead of bouncing back
+        fadeAnimation={false}
+        zoomAnimation={false}
         style={{ width: "100%", height: "100%", background: "transparent" }}
+        className="scene-map"
         zoomControl={true}
         keyboard={true}
         attributionControl={false}
@@ -377,8 +372,9 @@ export default function SceneViewerInternal({
           key={maxNativeZoom}
           url={`/tiles/${sceneId}/{z}/{y}/{x}.jpg`}
           errorTileUrl={`/tiles/${sceneId}/blank.png`}
-          noWrap={true}
+          {...SCENE_TILE_LAYER_PROPS}
           maxNativeZoom={maxNativeZoom}
+          maxZoom={maxNativeZoom}
           bounds={[
             [-256, 0],
             [0, 256]

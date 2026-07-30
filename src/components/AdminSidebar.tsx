@@ -14,9 +14,12 @@ import {
   Settings,
   Menu,
   X,
-  Lock
+  Lock,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { lockAdmin } from "@/actions/adminGate";
+import { useAdminShell } from "@/components/admin/AdminShellContext";
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -32,9 +35,23 @@ const navigation = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const { navCollapsed, toggleNavCollapsed, navWidthPx, isNavResizing } = useAdminShell();
 
   return (
     <>
+      {/* Desktop: reopen nav when collapsed */}
+      {navCollapsed && (
+        <button
+          type="button"
+          onClick={toggleNavCollapsed}
+          className="hidden md:flex fixed top-4 left-2 z-50 p-2 bg-white border border-zinc-200 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 shadow-sm transition-colors"
+          title="Show admin navigation"
+          aria-label="Show admin navigation"
+        >
+          <PanelLeftOpen className="w-5 h-5" />
+        </button>
+      )}
+
       {/* Mobile Menu Button */}
       <div className="md:hidden fixed top-4 right-4 z-50">
         <button
@@ -47,10 +64,23 @@ export default function AdminSidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:sticky top-0 left-0 z-40 h-screen w-64 bg-white border-r border-zinc-200 transform transition-transform duration-300 ease-in-out ${
+        style={{ width: navWidthPx }}
+        className={`fixed md:sticky top-0 left-0 z-40 h-screen shrink-0 bg-white border-r border-zinc-200 transform ease-in-out ${
+          isNavResizing ? "" : "transition-all duration-300"
+        } ${
           isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        }`}
+        } ${navCollapsed ? "md:hidden" : ""}`}
       >
+        <button
+          type="button"
+          onClick={toggleNavCollapsed}
+          className="hidden md:flex absolute top-3 right-2 z-50 p-1 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded transition-colors"
+          title="Hide admin navigation"
+          aria-label="Hide admin navigation"
+        >
+          <PanelLeftClose className="w-3.5 h-3.5" />
+        </button>
+
         <div className="flex items-center gap-3 px-6 py-7">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.png" alt="Mini Treasure" className="h-14 w-auto" />

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapContainer, TileLayer, Marker, Circle, Rectangle, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Circle, Rectangle, Tooltip, useMap, useMapEvents } from "react-leaflet";
 import { Maximize, Minimize, RotateCcw, Plus, ZoomIn, ZoomOut, Eye, EyeOff } from "lucide-react";
+import { fetchSceneMaxNativeZoom, SCENE_TILE_LAYER_PROPS } from "@/lib/sceneTiles";
 
 interface AdminSceneEditorProps {
   sceneId: string;
@@ -12,10 +13,20 @@ interface AdminSceneEditorProps {
   clickTolerance?: number; // scene default radius, used when a clue has no radius of its own
   focusClueId?: string | null; // clue whose hotspot should be highlighted
   focusSignal?: number; // bumps each time a focus is requested, so re-focusing re-centers
+  layoutRevision?: number; // bumps when sidebar width changes so map can reflow
   onAddClue: (x: number, y: number) => void;
   onUpdateClue: (id: string, x: number, y: number) => void;
   onSelectClue: (id: string) => void;
 }
+
+const MapInvalidateOnLayout = ({ revision }: { revision: number }) => {
+  const map = useMap();
+  useEffect(() => {
+    const id = requestAnimationFrame(() => map.invalidateSize({ animate: false }));
+    return () => cancelAnimationFrame(id);
+  }, [map, revision]);
+  return null;
+};
 
 // Measures the scene image by probing the max-zoom tile grid (including the
 // exact pixel size of the last, partial tiles), then fits the view so the whole
@@ -27,7 +38,7 @@ const FitSceneBounds = ({
 }: {
   sceneId: string,
   maxZoom: number,
-  onBounds: (bounds: L.LatLngBounds) => void
+  onBounds: (bounds: L.LatLngBounds, fitZoom: number) => void
 }) => {
   const map = useMap();
 
@@ -85,22 +96,31 @@ const FitSceneBounds = ({
 
       const bounds = L.latLngBounds([-(heightPx / scale), 0], [0, widthPx / scale]);
 
-      // Contain-fit: zoom so the WHOLE image exactly fills the (aspect-matched)
-      // viewport, lock panning to the image, and use that as the minimum zoom.
-      const fit = () => {
+      // Contain-fit on first load; on later resizes only refit if the user was
+      // already at minimum zoom — otherwise preserve their zoom/pan so +/- buttons
+      // aren't undone by sidebar/aspect-ratio layout shifts.
+      const applyBounds = (resetView: boolean) => {
         map.invalidateSize({ animate: false });
         const containZoom = map.getBoundsZoom(bounds, false);
+        const prevMinZoom = map.getMinZoom();
         map.setMinZoom(containZoom);
+        map.setMaxZoom(maxZoom);
         map.setMaxBounds(bounds);
-        map.setView(bounds.getCenter(), containZoom, { animate: false });
-      };
-      fit();
-      onBounds(bounds);
+        onBounds(bounds, containZoom);
 
-      // The map container starts at a placeholder ratio and resizes once the
-      // real image ratio is applied (and on fullscreen) — refit each time so the
-      // image stays exactly framed and the tiles' white padding never shows.
-      ro = new ResizeObserver(() => fit());
+        const shouldResetView =
+          resetView ||
+          map.getZoom() <= prevMinZoom + 0.01 ||
+          map.getZoom() < containZoom - 0.01;
+
+        if (shouldResetView) {
+          map.setView(bounds.getCenter(), containZoom, { animate: false });
+        }
+      };
+
+      applyBounds(true);
+
+      ro = new ResizeObserver(() => applyBounds(false));
       ro.observe(map.getContainer());
     })();
 
@@ -117,17 +137,33 @@ const FitSceneBounds = ({
 const ViewerControls = ({
   containerRef,
   sceneBounds,
+  fitZoom,
   showMarkers,
   onToggleMarkers,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>,
   sceneBounds: L.LatLngBounds | null,
+  fitZoom: number | null,
   showMarkers: boolean,
   onToggleMarkers: () => void,
 }) => {
   const map = useMap();
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(() => map.getZoom());
+  const [minZoom, setMinZoom] = useState(() => map.getMinZoom());
   const controlsRef = useRef<HTMLDivElement>(null);
+
+  useMapEvents({
+    zoomend: () => {
+      setZoom(map.getZoom());
+      setMinZoom(map.getMinZoom());
+    },
+  });
+
+  useEffect(() => {
+    setZoom(map.getZoom());
+    setMinZoom(map.getMinZoom());
+  }, [map, sceneBounds]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -159,26 +195,90 @@ const ViewerControls = ({
     }
   };
 
+  useEffect(() => {
+    setZoom(map.getZoom());
+    setMinZoom(map.getMinZoom());
+  }, [map, sceneBounds, fitZoom]);
+
+  const snapToFitView = useCallback(() => {
+    if (!sceneBounds) return map.getMinZoom();
+    const target =
+      fitZoom ?? map.getBoundsZoom(sceneBounds, false);
+    map.setView(sceneBounds.getCenter(), target, { animate: true });
+    setZoom(target);
+    return target;
+  }, [map, sceneBounds, fitZoom]);
+
   const resetView = () => {
-    // Refit so the whole scene image is visible, or fall back to the default view
-    if (sceneBounds) map.setView(sceneBounds.getCenter(), map.getBoundsZoom(sceneBounds, false));
+    if (sceneBounds) snapToFitView();
     else map.setView([0, 0], 1);
+  };
+
+  const ZOOM_STEP = 0.25;
+  const FIT_EPS = 0.05;
+
+  const handleZoomIn = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = Math.min(map.getMaxZoom(), map.getZoom() + ZOOM_STEP);
+    map.setZoom(next, { animate: true });
+    setZoom(next);
+  };
+
+  const handleZoomOut = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!sceneBounds) {
+      const next = Math.max(map.getMinZoom(), map.getZoom() - ZOOM_STEP);
+      map.setZoom(next, { animate: true });
+      setZoom(next);
+      return;
+    }
+
+    const targetFit = fitZoom ?? map.getBoundsZoom(sceneBounds, false);
+    const current = map.getZoom();
+
+    // Already at full-scene view — re-center without changing zoom.
+    if (current <= targetFit + FIT_EPS) {
+      snapToFitView();
+      return;
+    }
+
+    const next = current - ZOOM_STEP;
+    if (next <= targetFit + FIT_EPS) {
+      map.setView(sceneBounds.getCenter(), targetFit, { animate: true });
+      setZoom(targetFit);
+    } else {
+      map.setZoom(next, { animate: true });
+      setZoom(next);
+    }
+  };
+
+  const stopMapEvent = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   return (
     <div ref={controlsRef} className="absolute top-4 right-4 z-[1000] flex flex-col gap-2 pointer-events-auto">
       <div className="bg-black/60 backdrop-blur-xl border border-white/10 rounded-xl p-1 shadow-2xl flex flex-col">
         <button
-          onClick={() => map.zoomIn()}
+          type="button"
+          onClick={handleZoomIn}
+          onMouseDown={stopMapEvent}
           className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
           title="Zoom In"
+          aria-label="Zoom In"
         >
           <ZoomIn className="w-5 h-5" />
         </button>
         <button
-          onClick={() => map.zoomOut()}
+          type="button"
+          onClick={handleZoomOut}
+          onMouseDown={stopMapEvent}
           className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-          title="Zoom Out"
+          title="Zoom Out (full scene view)"
+          aria-label="Zoom Out"
         >
           <ZoomOut className="w-5 h-5" />
         </button>
@@ -275,16 +375,15 @@ const FocusController = ({ clue, signal }: { clue: any | null; signal: number })
   return null;
 };
 
-// Custom Marker Icons
-const createDivIcon = (html: string, className: string) => {
-  if (typeof window === "undefined") return undefined;
-  return L.divIcon({
-    html,
-    className,
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-  });
-};
+const dragHandleIcon =
+  typeof window === "undefined"
+    ? undefined
+    : L.divIcon({
+        html: '<div class="admin-hotspot-drag-handle" title="Drag to move"></div>',
+        className: "admin-hotspot-drag-icon",
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      });
 
 export default function AdminSceneEditor({
   sceneId,
@@ -292,35 +391,32 @@ export default function AdminSceneEditor({
   clickTolerance = 5,
   focusClueId = null,
   focusSignal = 0,
+  layoutRevision = 0,
   onAddClue,
   onUpdateClue,
   onSelectClue
 }: AdminSceneEditorProps) {
   const [mounted, setMounted] = useState(false);
   const [sceneBounds, setSceneBounds] = useState<L.LatLngBounds | null>(null);
+  const [fitZoom, setFitZoom] = useState<number | null>(null);
   const [showMarkers, setShowMarkers] = useState(true);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleSceneBounds = useCallback((bounds: L.LatLngBounds, zoom: number) => {
+    setSceneBounds(bounds);
+    setFitZoom(zoom);
+  }, []);
 
   // The tiler emits a different number of zoom levels per image (bigger images
   // produce more levels). Detect the deepest level that actually exists so the
   // image is measured and rendered at full resolution, instead of assuming a
   // fixed max zoom (which misfits larger uploads into the top-left corner).
-  const [maxNativeZoom, setMaxNativeZoom] = useState(3);
+  const [maxNativeZoom, setMaxNativeZoom] = useState(5);
   useEffect(() => {
     let cancelled = false;
-    const exists = (z: number) => new Promise<boolean>((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = `/tiles/${sceneId}/${z}/0/0.jpg`;
+    fetchSceneMaxNativeZoom(sceneId).then(z => {
+      if (!cancelled) setMaxNativeZoom(z);
     });
-    (async () => {
-      let max = 0;
-      for (let z = 1; z <= 8; z++) {
-        if (await exists(z)) max = z; else break;
-      }
-      if (!cancelled && max > 0) setMaxNativeZoom(max);
-    })();
     return () => { cancelled = true; };
   }, [sceneId]);
 
@@ -338,15 +434,6 @@ export default function AdminSceneEditor({
   if (!mounted) {
     return <div className="w-full h-full bg-zinc-100 flex items-center justify-center text-zinc-500">Loading Map...</div>;
   }
-
-  const clueIconHtml = `
-    <div class="relative group cursor-pointer">
-      <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 bg-amber-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(245,158,11,0.8)] animate-pulse"></div>
-      <svg class="w-8 h-8 text-amber-500 drop-shadow-xl" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
-      </svg>
-    </div>
-  `;
 
   // Frame the map to the image's exact aspect ratio (falling back to 16:9 until
   // the real dimensions load). With no letterbox, the tiles' white padding —
@@ -366,15 +453,18 @@ export default function AdminSceneEditor({
         center={[0, 0]}
         zoom={1}
         minZoom={0}
-        maxZoom={5}
+        maxZoom={maxNativeZoom}
         zoomSnap={0} // free fractional zoom so the contain-fit is exact, no letterboxing
         maxBoundsViscosity={1.0} // hard stop at the image edges instead of bouncing back
-        className="w-full h-full z-0"
+        fadeAnimation={false}
+        zoomAnimation={false}
+        className="w-full h-full z-0 scene-map"
         crs={L.CRS.Simple}
         zoomControl={false} // Custom controls used instead
         attributionControl={false}
       >
-        <FitSceneBounds sceneId={sceneId} maxZoom={maxNativeZoom} onBounds={setSceneBounds} />
+        <FitSceneBounds sceneId={sceneId} maxZoom={maxNativeZoom} onBounds={handleSceneBounds} />
+        <MapInvalidateOnLayout revision={layoutRevision} />
         <MapEvents onMapClick={onAddClue} />
         <FocusController clue={clues.find(c => c.id === focusClueId) ?? null} signal={focusSignal} />
         
@@ -383,8 +473,9 @@ export default function AdminSceneEditor({
           // sharp's "google" tile layout is {z}/{y}/{x} (row folder, column file)
           key={maxNativeZoom}
           url={`/tiles/${sceneId}/{z}/{y}/{x}.jpg`}
-          noWrap={true}
-          maxNativeZoom={maxNativeZoom} // deepest tile level that exists; upscale beyond that
+          {...SCENE_TILE_LAYER_PROPS}
+          maxNativeZoom={maxNativeZoom}
+          maxZoom={maxNativeZoom}
           bounds={[[-256, 0], [0, 256]]} // extent of the zoom-0 tile; no tiles exist outside this
           errorTileUrl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" // transparent fallback
         />
@@ -392,6 +483,7 @@ export default function AdminSceneEditor({
         <ViewerControls
           containerRef={containerRef}
           sceneBounds={sceneBounds}
+          fitZoom={fitZoom}
           showMarkers={showMarkers}
           onToggleMarkers={() => setShowMarkers(v => !v)}
         />
@@ -419,13 +511,30 @@ export default function AdminSceneEditor({
                 fillOpacity: 0,
                 dashArray: "4 4",
               };
+          const label = (
+            <Tooltip
+              permanent
+              direction="center"
+              className="admin-hotspot-tooltip"
+              offset={[0, 0]}
+            >
+              <span
+                className={`admin-hotspot-tooltip__text${isFocused ? " admin-hotspot-tooltip__text--focused" : ""}`}
+              >
+                {clue.name}
+              </span>
+            </Tooltip>
+          );
+
           return clue.shape === "SQUARE" ? (
             <Rectangle
               key={`r-${clue.id}`}
               bounds={[[clue.targetY - r, clue.targetX - r], [clue.targetY + r, clue.targetX + r]]}
               interactive={false}
               pathOptions={pathOptions}
-            />
+            >
+              {label}
+            </Rectangle>
           ) : (
             <Circle
               key={`r-${clue.id}`}
@@ -433,7 +542,9 @@ export default function AdminSceneEditor({
               radius={r}
               interactive={false}
               pathOptions={pathOptions}
-            />
+            >
+              {label}
+            </Circle>
           );
         })}
 
@@ -441,7 +552,7 @@ export default function AdminSceneEditor({
           <Marker
             key={clue.id}
             position={[clue.targetY, clue.targetX]}
-            icon={createDivIcon(clueIconHtml, "clue-marker bg-transparent border-none")}
+            icon={dragHandleIcon}
             draggable={true}
             eventHandlers={{
               click: () => onSelectClue(clue.id),

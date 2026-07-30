@@ -18,7 +18,7 @@ async function generateTiles(inputFile: string, outputDir: string) {
     const { width, height } = await sharp(inputFile).metadata();
 
     await sharp(inputFile)
-      .jpeg()
+      .jpeg({ quality: 92, mozjpeg: true })
       .tile({
         size: 256,
         layout: 'google' // Output Slippy map XYZ tiles ({z}/{x}/{y})
